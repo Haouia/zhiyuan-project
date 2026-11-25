@@ -1,0 +1,251 @@
+{
+  "contractVersion": "0.1.0",
+  "description": "第三节接口契约的可执行描述。external 经网关鉴权，internal 仅由服务凭证调用；错误响应统一包含 code、message、traceId。",
+  "errorEnvelope": ["code", "message", "traceId"],
+  "external": [
+    {
+      "id": "identity",
+      "method": "GET",
+      "path": "/api/v1/identity",
+      "roles": ["ADMIN", "EMPLOYEE"],
+      "success": 200,
+      "response": {"subject": "string", "tenantId": "string", "roles": "array"}
+    },
+    {
+      "id": "documents-list",
+      "method": "GET",
+      "path": "/api/v1/documents",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"items": "array", "hasNext": "boolean"}
+    },
+    {
+      "id": "document-upload",
+      "method": "POST",
+      "path": "/api/v1/documents",
+      "roles": ["ADMIN"],
+      "success": 202,
+      "requestHeaders": ["Idempotency-Key"],
+      "response": {"documentId": "string", "version": "number", "status": "string"}
+    },
+    {
+      "id": "document-version-append",
+      "method": "POST",
+      "path": "/api/v1/documents/{id}/versions",
+      "roles": ["ADMIN"],
+      "success": 202
+    },
+    {
+      "id": "document-version-status",
+      "method": "GET",
+      "path": "/api/v1/documents/{id}/versions/{version}",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"status": "string", "activeVersion": "number|null", "errorCode": "string|null"}
+    },
+    {
+      "id": "document-source",
+      "method": "GET",
+      "path": "/api/v1/documents/{id}/versions/{version}/source",
+      "roles": ["ADMIN", "EMPLOYEE"],
+      "success": 200,
+      "response": {"text": "string"}
+    },
+    {
+      "id": "document-parsed",
+      "method": "GET",
+      "path": "/api/v1/documents/{id}/versions/{version}/parsed",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"documentId": "string", "title": "string", "version": "number", "text": "string", "locations": "object"}
+    },
+    {
+      "id": "document-file",
+      "method": "GET",
+      "path": "/api/v1/documents/{id}/versions/{version}/file",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {
+        "body": "binary (original file bytes)",
+        "headers": {
+          "Content-Type": "stored original media type, or application/octet-stream when absent",
+          "Content-Disposition": "attachment; filename*=UTF-8''<RFC 5987 encoded original filename>"
+        }
+      }
+    },
+    {
+      "id": "questions",
+      "method": "POST",
+      "path": "/api/v1/questions",
+      "roles": ["ADMIN", "EMPLOYEE"],
+      "success": 200,
+      "request": {
+        "question": "string (1..1000)",
+        "history": "array (optional, at most 4 items of {question, answer}; only used to resolve follow-up references, never as citation evidence)"
+      },
+      "response": {"status": "string", "answer": "string", "citations": "array", "traceId": "string"}
+    },
+    {
+      "id": "usage",
+      "method": "GET",
+      "path": "/api/v1/usage",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"date": "string", "currency": "string", "models": "array"}
+    },
+    {
+      "id": "evals-list",
+      "method": "GET",
+      "path": "/api/v1/evals",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"items": "array", "total": "number"}
+    },
+    {
+      "id": "eval-detail",
+      "method": "GET",
+      "path": "/api/v1/evals/{reportId}",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"reportId": "string", "sampleCount": "number", "samples": "array", "averages": "object"}
+    },
+    {
+      "id": "eval-run",
+      "method": "POST",
+      "path": "/api/v1/evals",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"reportId": "string", "status": "string", "sampleCount": "number"}
+    },
+    {
+      "id": "monitoring",
+      "method": "GET",
+      "path": "/api/v1/monitoring",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"checkedAt": "number", "services": "array", "metrics": "object"}
+    },
+    {
+      "id": "access",
+      "method": "GET",
+      "path": "/api/v1/access",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"realm": "string", "directory": "object", "users": "array", "roles": "array", "counts": "object"}
+    },
+    {
+      "id": "register",
+      "method": "POST",
+      "path": "/api/v1/register",
+      "roles": [],
+      "success": 201,
+      "response": {"username": "string", "tenantId": "string", "message": "string"}
+    },
+    {
+      "id": "invite-list",
+      "method": "GET",
+      "path": "/api/v1/invite-codes",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"rotationMinutes": "number", "active": "object", "history": "array"}
+    },
+    {
+      "id": "invite-rotate",
+      "method": "POST",
+      "path": "/api/v1/invite-codes/rotate",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"rotationMinutes": "number", "active": "object", "history": "array"}
+    },
+    {
+      "id": "user-promote",
+      "method": "POST",
+      "path": "/api/v1/users/{username}/promote",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"username": "string", "roles": "array"}
+    },
+    {
+      "id": "user-demote",
+      "method": "POST",
+      "path": "/api/v1/users/{username}/demote",
+      "roles": ["ADMIN"],
+      "success": 200,
+      "response": {"username": "string", "roles": "array"}
+    }
+  ],
+  "internal": [
+    {
+      "id": "doc-active-versions",
+      "path": "/internal/v1/documents/active-versions",
+      "provider": "doc-service",
+      "consumer": "search-service"
+    },
+    {
+      "id": "doc-parsed",
+      "path": "/internal/v1/documents/{id}/versions/{version}/parsed",
+      "provider": "doc-service",
+      "consumer": "search-service"
+    },
+    {
+      "id": "doc-source",
+      "path": "/internal/v1/documents/{id}/versions/{version}/source",
+      "provider": "doc-service",
+      "consumer": "ai-service"
+    },
+    {
+      "id": "doc-file",
+      "path": "/internal/v1/documents/{id}/versions/{version}/file",
+      "provider": "doc-service",
+      "consumer": "gateway"
+    },
+    {
+      "id": "search-retrieval",
+      "path": "/internal/v1/retrieval",
+      "provider": "search-service",
+      "consumer": "ai-service"
+    },
+    {
+      "id": "ai-questions",
+      "path": "/internal/v1/questions",
+      "provider": "ai-service",
+      "consumer": "gateway"
+    },
+    {
+      "id": "ai-usage",
+      "path": "/internal/v1/usage",
+      "provider": "ai-service",
+      "consumer": "gateway"
+    },
+    {
+      "id": "metric-evaluations",
+      "path": "/internal/v1/evaluations",
+      "provider": "metric-service",
+      "consumer": "offline-java-job"
+    },
+    {
+      "id": "metric-health",
+      "path": "/internal/v1/health",
+      "provider": "metric-service",
+      "consumer": "gateway"
+    },
+    {
+      "id": "keycloak-admin-users",
+      "path": "/admin/realms/rag-local/users",
+      "provider": "keycloak",
+      "consumer": "gateway"
+    }
+  ],
+  "statusCodes": {
+    "400": "空问题、非法参数或 unknown content type",
+    "401": "未登录或无效令牌",
+    "403": "角色不足",
+    "404": "跨租户或不存在",
+    "409": "评测任务正在执行或用户名已被注册",
+    "413": "上传超过 10 MiB",
+    "415": "不支持的文件格式或媒体类型",
+    "429": "达到租户限额，带 Retry-After",
+    "502": "模型输出无效",
+    "503": "依赖或模型服务不可用"
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "uid": "rag-overview",
+  "title": "RAG 知识引擎 · 预发总览",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["rag", "preprod"],
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "问答延迟 P95 / P50（秒）",
+      "description": "ai-service 记录的 rag.questions Timer，目标端到端 P95 ≤ 10 秒",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(rag_questions_seconds_bucket[5m])))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(rag_questions_seconds_bucket[5m])))", "legendFormat": "P50" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "问答失败率（按结果码）",
+      "description": "5xx / 4xx / 拒答占比，目标 5xx 比例低于 1%",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum by (outcome) (rate(rag_question_results_total[5m]))", "legendFormat": "{{outcome}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Kafka 待发事件积压",
+      "description": "doc-service / search-service 的 event_outbox 待发送条数",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum by (service) (rag_kafka_pending_events)", "legendFormat": "{{service}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "索引失败次数",
+      "description": "建索引耗尽重试进入死信 / 失败事件的累计速率",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum by (service) (rate(rag_index_failures_total[5m]))", "legendFormat": "{{service}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "模型主备切换",
+      "description": "主端点超时 / 供应商 429 / 5xx 后切到备用端点的次数",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum by (from_endpoint, to_endpoint) (rate(rag_model_failover_total[5m]))", "legendFormat": "{{from_endpoint}} → {{to_endpoint}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Token 用量（按模型与方向）",
+      "description": "输入 / 输出 Token 速率，与租户用量面板的估算成本联动",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "sum by (model, direction) (rate(rag_model_tokens_total[5m]))", "legendFormat": "{{model}} · {{direction}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rag-knowledge
+resources:
+  - 00-namespace.yaml
+  - 20-deployments.yaml
+  - 30-services.yaml
+  - 40-infra.yaml
+  - 50-pdb.yaml
+# 密钥由 Sealed Secrets / Vault / CSI driver 注入；secret.example.yaml 仅为模板，不纳入部署。
+# SkyWalking 可选接入：部署 OAP 与 skywalking-java-agent 后取消下方注释。
+# patches:
+#   - path: ../observability/skywalking/agent-patch.yaml
+images:
+  - name: ragknowledge/gateway
+    newTag: 0.1.0-phase5curr
+  - name: ragknowledge/doc-service
+    newTag: 0.1.0-phase5curr
+  - name: ragknowledge/search-service
+    newTag: 0.1.0-phase5curr
+  - name: ragknowledge/ai-service
+    newTag: 0.1.0-phase5curr
+  - name: ragknowledge/metric-service
+    newTag: 0.1.0-phase5curr
+commonAnnotations:
+  rag.knowledge/release: 0.1.0-phase5curr

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rag-knowledge
+  labels:
+    name: rag-knowledge
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rag-config
+  namespace: rag-knowledge
+data:
+  SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: "nacos:8848"
+  SPRING_CLOUD_NACOS_DISCOVERY_USERNAME: "nacos"
+  # 堆按容器内存上限的比例分配：gateway 上限 512Mi、其余 Java 服务 768Mi，固定 -Xmx512m 会让 gateway 的堆加堆外内存超限被 OOMKilled。
+  JAVA_TOOL_OPTIONS: "-Xms128m -XX:MaxRAMPercentage=45 -XX:MaxDirectMemorySize=96m -Duser.home=/tmp"
+  RAG_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  RAG_OPENSEARCH_URL: "http://opensearch:9200"
+  RAG_OPENSEARCH_INDEX: "rag-doc-chunks-v1"
+  SPRING_DATA_REDIS_URL: "redis://redis:6379"
+  RAG_DOC_DB_URL: "jdbc:mysql://mysql:3306/doc_db?sslMode=DISABLED&allowPublicKeyRetrieval=true"
+  RAG_SEARCH_DB_URL: "jdbc:mysql://mysql:3306/search_db?sslMode=DISABLED&allowPublicKeyRetrieval=true"
+  RAG_OIDC_ISSUER: "https://idp.example.com/realms/enterprise"
+  RAG_OIDC_JWKS_URI: "https://idp.example.com/realms/enterprise/protocol/openid-connect/certs"
+  RAG_OIDC_AUDIENCE: "rag-api"
+  RAG_OIDC_CLIENT_ID: "rag-web"
+  RAG_EMBEDDING_MODEL: "approved-embedding"
+  RAG_EMBEDDING_VERSION: "approved-embedding-v1"
+  RAG_EMBEDDING_DIMENSIONS: "1024"
+  RAG_TENANT_QUESTION_LIMIT: "60"
+  RAG_USAGE_CURRENCY: "CNY"
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+  # SkyWalking 可选接入：OAP 就绪后由 javaagent 串联网关、问答、检索、文档与模型调用。
+  SW_AGENT_NAME: "rag-knowledge"
+  SW_AGENT_COLLECTOR_BACKEND_SERVICES: "skywalking-oap:11800"

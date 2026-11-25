@@ -1,0 +1,66 @@
+{
+  "version": "0.1.0",
+  "revision": "phase5curr",
+  "tag": "0.1.0-phase5curr",
+  "sequence": 2,
+  "previous": "0.1.0-phase5prev",
+  "createdAt": "2026-11-19T14:14:41.263487+00:00",
+  "images": [
+    {
+      "service": "gateway",
+      "image": "ragknowledge/gateway:0.1.0-phase5curr",
+      "id": "sha256:0495eaeaeb8b220012a36f06fa95f5e8b265886569ede9f14df4c698c234b147",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "doc-service",
+      "image": "ragknowledge/doc-service:0.1.0-phase5curr",
+      "id": "sha256:261133fd167496d87fa56142f24a0388e9b6eba48599dea8cbf7d872bb7e6d7a",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "search-service",
+      "image": "ragknowledge/search-service:0.1.0-phase5curr",
+      "id": "sha256:417de4cec447254e3755dc21b1f5fe11281c08dfcd3ff3d688eeee8318a390e8",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "ai-service",
+      "image": "ragknowledge/ai-service:0.1.0-phase5curr",
+      "id": "sha256:091b6caf2f59552283ac319f867f5640d03b09f47ac313499666e0786eb244c8",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "metric-service",
+      "image": "ragknowledge/metric-service:0.1.0-phase5curr",
+      "id": "sha256:a4b06a8a670b1d14f8d53d2a1c19be0cdb997264ec70e865a0560e43aea3b89a",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "model-primary",
+      "image": "ragknowledge/model-primary:0.1.0-phase5curr",
+      "id": "sha256:6534d1400046bc8ca70af2aa257f7b0ccd453050ebaacbb96f4c30f4fc459dd7",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "model-backup",
+      "image": "ragknowledge/model-backup:0.1.0-phase5curr",
+      "id": "sha256:6311dc46e59a3424eea2fc69f6c7eb0c0d28190d33207a38d0f513e16b094601",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    },
+    {
+      "service": "keycloak",
+      "image": "ragknowledge/keycloak:0.1.0-phase5curr",
+      "id": "sha256:37dbe3d5aa196801d4ba2d7b0c5fdf94396bfc63f86e735ab7878ad364f490d9",
+      "ociVersion": "0.1.0",
+      "ociRevision": "dev"
+    }
+  ]
+}

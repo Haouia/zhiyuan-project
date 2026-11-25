@@ -1,0 +1,383 @@
+name: rag-knowledge
+
+x-java-environment: &java-environment
+  SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+  SPRING_CLOUD_NACOS_DISCOVERY_USERNAME: nacos
+  SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD: nacos
+  JAVA_TOOL_OPTIONS: -Xms32m -Xmx128m -XX:MaxDirectMemorySize=48m -XX:ActiveProcessorCount=2 -Duser.home=/tmp
+
+x-java: &java
+  depends_on:
+    nacos:
+      condition: service_healthy
+  healthcheck: &java-health
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health"]
+    interval: 5s
+    timeout: 3s
+    retries: 24
+    start_period: 30s
+  environment: *java-environment
+
+services:
+  mysql:
+    image: mysql:8.4
+    command: ["--innodb-buffer-pool-size=48M", "--performance-schema=OFF", "--max-connections=40"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${RAG_DB_ROOT_PASSWORD:?run scripts/start.ps1 first}
+      MYSQL_ROOT_HOST: localhost
+      RAG_DOC_DB_PASSWORD: ${RAG_DOC_DB_PASSWORD:?run scripts/start.ps1 first}
+      RAG_SEARCH_DB_PASSWORD: ${RAG_SEARCH_DB_PASSWORD:?run scripts/start.ps1 first}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$$RAG_DOC_DB_PASSWORD" mysql -h 127.0.0.1 -urag_doc -D doc_db -Nse 'SELECT 1' | grep -qx 1 &&
+          MYSQL_PWD="$$RAG_SEARCH_DB_PASSWORD" mysql -h 127.0.0.1 -urag_search -D search_db -Nse 'SELECT 1' | grep -qx 1
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 35s
+
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN: ${RAG_NACOS_SIGNING_KEY:?run scripts/start.ps1 first}
+      NACOS_AUTH_IDENTITY_KEY: rag-server
+      NACOS_AUTH_IDENTITY_VALUE: ${RAG_NACOS_SERVER_ID:?run scripts/start.ps1 first}
+      JVM_XMS: 64m
+      JVM_XMX: 192m
+      JVM_XMN: 64m
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=2
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8848/nacos/v1/console/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 35s
+
+  keycloak:
+    image: ragknowledge/keycloak:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: ./docker/keycloak
+      args:
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: http://127.0.0.1:8180
+      KC_DB: dev-mem
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${RAG_KEYCLOAK_ADMIN_USER:?run scripts/start.ps1 first}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${RAG_KEYCLOAK_ADMIN_PASSWORD:?run scripts/start.ps1 first}
+      KC_SPI_THEME_CACHE_THEMES: "false"
+      KC_SPI_THEME_STATIC_MAX_AGE: "-1"
+      JAVA_OPTS_KC_HEAP: -Xms64m -Xmx256m
+      JAVA_OPTS_APPEND: -XX:ActiveProcessorCount=2
+    volumes:
+      - ./docker/keycloak/themes/rag:/opt/keycloak/themes/rag
+    ports:
+      - "127.0.0.1:8180:8080"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000;
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;
+          read -r status <&3;
+          [[ "$$status" == *' 200 '* ]]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 45s
+
+  kafka:
+    image: apache/kafka:4.2.2
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=2
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "true > /dev/tcp/127.0.0.1/9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+
+  opensearch:
+    image: public.ecr.aws/opensearchproject/opensearch:3.10.0
+    environment:
+      discovery.type: single-node
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms384m -Xmx384m -XX:ActiveProcessorCount=2
+      action.auto_create_index: "false"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=2s"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 45s
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes", "--save", ""]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  gateway:
+    <<: *java
+    image: ragknowledge/gateway:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: docker/java.Dockerfile
+      args:
+        SERVICE: gateway
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      <<: *java-environment
+      RAG_OIDC_ISSUER: ${RAG_OIDC_ISSUER:-http://127.0.0.1:8180/realms/rag-local}
+      RAG_OIDC_JWKS_URI: ${RAG_OIDC_JWKS_URI:-http://keycloak:8080/realms/rag-local/protocol/openid-connect/certs}
+      RAG_OIDC_AUDIENCE: ${RAG_OIDC_AUDIENCE:-rag-api}
+      RAG_OIDC_CLIENT_ID: ${RAG_OIDC_CLIENT_ID:-rag-web}
+      RAG_GATEWAY_DOC_TOKEN: ${RAG_GATEWAY_DOC_TOKEN:?run scripts/start.ps1 first}
+      RAG_GATEWAY_AI_TOKEN: ${RAG_GATEWAY_AI_TOKEN:?run scripts/start.ps1 first}
+      RAG_METRIC_URL: http://metric-service:8090
+      RAG_METRIC_TOKEN: ${RAG_METRIC_TOKEN:?run scripts/start.ps1 first}
+      RAG_EVAL_DIR: /app/eval
+      RAG_KEYCLOAK_ADMIN_URL: http://keycloak:8080
+      RAG_KEYCLOAK_ADMIN_REALM: rag-local
+      RAG_KEYCLOAK_ADMIN_USER: ${RAG_KEYCLOAK_ADMIN_USER:?run scripts/start.ps1 first}
+      RAG_KEYCLOAK_ADMIN_PASSWORD: ${RAG_KEYCLOAK_ADMIN_PASSWORD:?run scripts/start.ps1 first}
+      RAG_INVITE_DIR: /app/data
+    volumes:
+      - ./eval:/app/eval
+      - ./data:/app/data
+    depends_on:
+      nacos:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  doc-service:
+    <<: *java
+    image: ragknowledge/doc-service:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: docker/java.Dockerfile
+      args:
+        SERVICE: doc-service
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      <<: *java-environment
+      RAG_DOC_DB_URL: jdbc:mysql://mysql:3306/doc_db?sslMode=DISABLED&allowPublicKeyRetrieval=true
+      RAG_DOC_DB_PASSWORD: ${RAG_DOC_DB_PASSWORD:?run scripts/start.ps1 first}
+      RAG_GATEWAY_DOC_TOKEN: ${RAG_GATEWAY_DOC_TOKEN:?run scripts/start.ps1 first}
+      RAG_SEARCH_DOC_TOKEN: ${RAG_SEARCH_DOC_TOKEN:?run scripts/start.ps1 first}
+      RAG_AI_DOC_TOKEN: ${RAG_AI_DOC_TOKEN:?run scripts/start.ps1 first}
+      JAVA_TOOL_OPTIONS: -Xms48m -Xmx256m -XX:MaxDirectMemorySize=48m -XX:ActiveProcessorCount=2 -Duser.home=/tmp
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+    depends_on: &database-java-dependencies
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8082/actuator/health"]
+
+  search-service:
+    <<: *java
+    image: ragknowledge/search-service:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: docker/java.Dockerfile
+      args:
+        SERVICE: search-service
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      <<: *java-environment
+      RAG_SEARCH_DB_URL: jdbc:mysql://mysql:3306/search_db?sslMode=DISABLED&allowPublicKeyRetrieval=true
+      RAG_SEARCH_DB_PASSWORD: ${RAG_SEARCH_DB_PASSWORD:?run scripts/start.ps1 first}
+      RAG_SEARCH_DOC_TOKEN: ${RAG_SEARCH_DOC_TOKEN:?run scripts/start.ps1 first}
+      RAG_AI_SEARCH_TOKEN: ${RAG_AI_SEARCH_TOKEN:?run scripts/start.ps1 first}
+      RAG_EMBEDDING_URL: ${RAG_EMBEDDING_URL:-}
+      RAG_EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-local-test}
+      RAG_EMBEDDING_VERSION: ${RAG_EMBEDDING_VERSION:-local-test-v1}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-128}
+      RAG_OPENSEARCH_INDEX: ${RAG_OPENSEARCH_INDEX:-rag-doc-chunks-v1}
+      JAVA_TOOL_OPTIONS: -Xms48m -Xmx256m -XX:MaxDirectMemorySize=48m -XX:ActiveProcessorCount=2 -Duser.home=/tmp
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+    depends_on:
+      <<: *database-java-dependencies
+      opensearch:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8083/actuator/health"]
+
+  ai-service:
+    <<: *java
+    image: ragknowledge/ai-service:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: docker/java.Dockerfile
+      args:
+        SERVICE: ai-service
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      <<: *java-environment
+      SPRING_DATA_REDIS_URL: redis://redis:6379
+      RAG_GATEWAY_AI_TOKEN: ${RAG_GATEWAY_AI_TOKEN:?run scripts/start.ps1 first}
+      RAG_AI_SEARCH_TOKEN: ${RAG_AI_SEARCH_TOKEN:?run scripts/start.ps1 first}
+      RAG_AI_DOC_TOKEN: ${RAG_AI_DOC_TOKEN:?run scripts/start.ps1 first}
+      RAG_CHAT_URL: ${RAG_CHAT_URL-http://model-primary:8095/v1/chat/completions}
+      RAG_CHAT_MODEL: ${RAG_CHAT_MODEL:-fixture-primary}
+      RAG_CHAT_API_KEY: ${RAG_CHAT_API_KEY:-}
+      RAG_CHAT_BACKUP_URL: ${RAG_CHAT_BACKUP_URL-http://model-backup:8096/v1/chat/completions}
+      RAG_CHAT_BACKUP_MODEL: ${RAG_CHAT_BACKUP_MODEL:-fixture-backup}
+      RAG_CHAT_BACKUP_API_KEY: ${RAG_CHAT_BACKUP_API_KEY:-}
+      RAG_CHAT_TIMEOUT_MS: ${RAG_CHAT_TIMEOUT_MS:-6000}
+      RAG_CHAT_JSON_MODE: ${RAG_CHAT_JSON_MODE:-true}
+      RAG_CHAT_THINKING: ${RAG_CHAT_THINKING:-}
+      RAG_CHAT_PRICE_INPUT_PER_MILLION: ${RAG_CHAT_PRICE_INPUT_PER_MILLION:-2}
+      RAG_CHAT_PRICE_OUTPUT_PER_MILLION: ${RAG_CHAT_PRICE_OUTPUT_PER_MILLION:-6}
+      RAG_CHAT_BACKUP_PRICE_INPUT_PER_MILLION: ${RAG_CHAT_BACKUP_PRICE_INPUT_PER_MILLION:-3}
+      RAG_CHAT_BACKUP_PRICE_OUTPUT_PER_MILLION: ${RAG_CHAT_BACKUP_PRICE_OUTPUT_PER_MILLION:-9}
+      RAG_BREAKER_FAILURES: ${RAG_BREAKER_FAILURES:-2}
+      RAG_BREAKER_COOLDOWN_MS: ${RAG_BREAKER_COOLDOWN_MS:-8000}
+      RAG_TENANT_QUESTION_LIMIT: ${RAG_TENANT_QUESTION_LIMIT:-12}
+      RAG_USAGE_CURRENCY: ${RAG_USAGE_CURRENCY:-CNY}
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: always
+    depends_on:
+      nacos:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      <<: *java-health
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/actuator/health"]
+
+  metric-service:
+    image: ragknowledge/metric-service:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: ./metric-service
+      args:
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      RAG_METRIC_TOKEN: ${RAG_METRIC_TOKEN:?run scripts/start.ps1 first}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request as http;
+          request = http.Request('http://127.0.0.1:8090/internal/v1/health', headers={'Authorization': 'Bearer ' + os.environ['RAG_METRIC_TOKEN']});
+          http.urlopen(request, timeout=2).close()
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  model-primary:
+    image: ragknowledge/model-primary:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: ./docker/model-fixture
+      args:
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      PORT: "8095"
+      TIMEOUT_SLEEP: "12"
+    ports:
+      - "127.0.0.1:8095:8095"
+    healthcheck: &model-health
+      test: ["CMD", "python", "-c", "import os, urllib.request as http; http.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  model-backup:
+    image: ragknowledge/model-backup:${RAG_IMAGE_TAG:-dev}
+    build:
+      context: ./docker/model-fixture
+      args:
+        VERSION: ${RAG_VERSION:-0.1.0}
+        REVISION: ${RAG_REVISION:-dev}
+    environment:
+      PORT: "8096"
+      TIMEOUT_SLEEP: "12"
+    ports:
+      - "127.0.0.1:8096:8096"
+    healthcheck: *model-health
+
+  metric-eval:
+    profiles: [tools]
+    image: maven:3.9-eclipse-temurin-21
+    entrypoint: ["java", "/scripts/EvalJob.java"]
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx96m -XX:ActiveProcessorCount=2
+      RAG_METRIC_TOKEN: ${RAG_METRIC_TOKEN:?run scripts/start.ps1 first}
+      RAG_METRIC_URL: http://metric-service:8090
+    volumes:
+      - ./scripts/EvalJob.java:/scripts/EvalJob.java:ro
+      - ./eval:/eval
+
+  metric-probe:
+    profiles: [tools]
+    image: maven:3.9-eclipse-temurin-21
+    entrypoint: ["java", "/scripts/MetricProbe.java"]
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx96m -XX:ActiveProcessorCount=2
+      RAG_METRIC_TOKEN: ${RAG_METRIC_TOKEN:?run scripts/start.ps1 first}
+    depends_on:
+      metric-service:
+        condition: service_healthy
+    volumes:
+      - ./scripts/MetricProbe.java:/scripts/MetricProbe.java:ro
+
+volumes:
+  mysql-data:
+  kafka-data:
+  opensearch-data:
+  redis-data:

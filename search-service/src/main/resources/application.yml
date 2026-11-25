@@ -1,0 +1,63 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: search-service
+  datasource:
+    url: ${RAG_SEARCH_DB_URL}
+    username: ${RAG_SEARCH_DB_USER:rag_search}
+    password: ${RAG_SEARCH_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 4
+  flyway:
+    schemas: search_db
+    default-schema: search_db
+    create-schemas: false
+  cloud:
+    loadbalancer:
+      cache:
+        enabled: false
+  kafka:
+    bootstrap-servers: ${RAG_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 3000
+        request.timeout.ms: 4000
+        delivery.timeout.ms: 6500
+    consumer:
+      group-id: rag-search-index-v1
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 1
+      properties:
+        max.poll.interval.ms: 900000
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+rag:
+  search-doc-token: ${RAG_SEARCH_DOC_TOKEN}
+  ai-search-token: ${RAG_AI_SEARCH_TOKEN}
+  opensearch-url: ${RAG_OPENSEARCH_URL:http://opensearch:9200}
+  opensearch-index: ${RAG_OPENSEARCH_INDEX:rag-doc-chunks-v1}
+  embedding-url: ${RAG_EMBEDDING_URL:}
+  embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
+  embedding-model: ${RAG_EMBEDDING_MODEL:local-test}
+  embedding-version: ${RAG_EMBEDDING_VERSION:local-test-v1}
+  embedding-dimensions: ${RAG_EMBEDDING_DIMENSIONS:128}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] traceId=%X{traceId:-} %logger{24} : %msg%n"

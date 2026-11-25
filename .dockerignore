@@ -1,0 +1,15 @@
+**
+!docker/
+!docker/java.Dockerfile
+!gateway/
+!gateway/target/
+!gateway/target/gateway.jar
+!doc-service/
+!doc-service/target/
+!doc-service/target/doc-service.jar
+!search-service/
+!search-service/target/
+!search-service/target/search-service.jar
+!ai-service/
+!ai-service/target/
+!ai-service/target/ai-service.jar

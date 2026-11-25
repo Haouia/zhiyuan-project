@@ -1,0 +1,58 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: doc-service
+  datasource:
+    url: ${RAG_DOC_DB_URL}
+    username: ${RAG_DOC_DB_USER:rag_doc}
+    password: ${RAG_DOC_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 4
+  flyway:
+    schemas: doc_db
+    default-schema: doc_db
+    create-schemas: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+  task:
+    scheduling:
+      pool:
+        size: 2
+  kafka:
+    bootstrap-servers: ${RAG_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 3000
+        request.timeout.ms: 4000
+        delivery.timeout.ms: 6500
+    consumer:
+      group-id: rag-doc-results-v1
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+rag:
+  gateway-doc-token: ${RAG_GATEWAY_DOC_TOKEN}
+  search-doc-token: ${RAG_SEARCH_DOC_TOKEN}
+  ai-doc-token: ${RAG_AI_DOC_TOKEN}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] traceId=%X{traceId:-} %logger{24} : %msg%n"

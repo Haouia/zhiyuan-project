@@ -1,0 +1,241 @@
+{
+  "realm": "rag-local",
+  "displayName": "企业知识平台 · 本地",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginTheme": "rag",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "ADMIN"
+      },
+      {
+        "name": "EMPLOYEE"
+      }
+    ]
+  },
+  "scopeMappings": [
+    {
+      "client": "rag-web",
+      "roles": [
+        "ADMIN",
+        "EMPLOYEE"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "tenant-a"
+    },
+    {
+      "name": "tenant-b"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "rag-web",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "fullScopeAllowed": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/oidc/callback",
+        "http://127.0.0.1:8080/admin/",
+        "http://localhost:8080/admin/",
+        "http://127.0.0.1:8080/ask/",
+        "http://localhost:8080/ask/"
+      ],
+      "webOrigins": [
+        "http://127.0.0.1:8080",
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:8080/admin/##http://localhost:8080/admin/##http://127.0.0.1:8080/ask/##http://localhost:8080/ask/"
+      },
+      "protocolMappers": [
+        {
+          "name": "rag-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "rag-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "false",
+            "claim.name": "tenant_id",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "application roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "a-admin",
+      "enabled": true,
+      "firstName": "A",
+      "lastName": "Admin",
+      "email": "a-admin@example.invalid",
+      "attributes": {
+        "tenant_id": [
+          "tenant-a"
+        ]
+      },
+      "realmRoles": [
+        "ADMIN"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/tenant-a"
+      ]
+    },
+    {
+      "username": "a-employee",
+      "enabled": true,
+      "firstName": "A",
+      "lastName": "Employee",
+      "email": "a-employee@example.invalid",
+      "attributes": {
+        "tenant_id": [
+          "tenant-a"
+        ]
+      },
+      "realmRoles": [
+        "EMPLOYEE"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/tenant-a"
+      ]
+    },
+    {
+      "username": "b-admin",
+      "enabled": true,
+      "firstName": "B",
+      "lastName": "Admin",
+      "email": "b-admin@example.invalid",
+      "attributes": {
+        "tenant_id": [
+          "tenant-b"
+        ]
+      },
+      "realmRoles": [
+        "ADMIN"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/tenant-b"
+      ]
+    },
+    {
+      "username": "b-employee",
+      "enabled": true,
+      "firstName": "B",
+      "lastName": "Employee",
+      "email": "b-employee@example.invalid",
+      "attributes": {
+        "tenant_id": [
+          "tenant-b"
+        ]
+      },
+      "realmRoles": [
+        "EMPLOYEE"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/tenant-b"
+      ]
+    },
+    {
+      "username": "no-role",
+      "enabled": true,
+      "firstName": "No",
+      "lastName": "Role",
+      "email": "no-role@example.invalid",
+      "attributes": {
+        "tenant_id": [
+          "tenant-a"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/tenant-a"
+      ]
+    },
+    {
+      "username": "no-tenant",
+      "enabled": true,
+      "firstName": "No",
+      "lastName": "Tenant",
+      "email": "no-tenant@example.invalid",
+      "realmRoles": [
+        "EMPLOYEE"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "RagLocalExample42!",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

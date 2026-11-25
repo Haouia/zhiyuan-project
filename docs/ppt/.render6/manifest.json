@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "backend": "native",
+  "rasterEngine": "libreoffice",
+  "source": "saved",
+  "inputPath": "C:\\Users\\legion\\Desktop\\project-02\\docs\\ppt\\知源-企业级RAG知识平台-项目演示.pptx",
+  "sourceSha256": "5cb8912594886166361fb29b479675f1c73f1bc8d5829bbd3dd045311d06f9cc",
+  "dpi": 144,
+  "pageCount": 21,
+  "images": [
+    {
+      "index": 1,
+      "page": 8,
+      "path": "C:\\Users\\legion\\Desktop\\project-02\\docs\\ppt\\.render6\\page-0001.png",
+      "width": 1920,
+      "height": 1081,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720.0666666666667
+      },
+      "byteLength": 186331
+    },
+    {
+      "index": 2,
+      "page": 12,
+      "path": "C:\\Users\\legion\\Desktop\\project-02\\docs\\ppt\\.render6\\page-0002.png",
+      "width": 1920,
+      "height": 1081,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720.0666666666667
+      },
+      "byteLength": 122016
+    },
+    {
+      "index": 3,
+      "page": 13,
+      "path": "C:\\Users\\legion\\Desktop\\project-02\\docs\\ppt\\.render6\\page-0003.png",
+      "width": 1920,
+      "height": 1081,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720.0666666666667
+      },
+      "byteLength": 126066
+    },
+    {
+      "index": 4,
+      "page": 18,
+      "path": "C:\\Users\\legion\\Desktop\\project-02\\docs\\ppt\\.render6\\page-0004.png",
+      "width": 1920,
+      "height": 1081,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720.0666666666667
+      },
+      "byteLength": 140118
+    }
+  ],
+  "missingFonts": [
+    "Segoe UI Variable Display",
+    "Cascadia Mono"
+  ]
+}

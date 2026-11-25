@@ -1,0 +1,27 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: gateway, namespace: rag-knowledge }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: gateway } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: doc-service, namespace: rag-knowledge }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: doc-service } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: search-service, namespace: rag-knowledge }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: search-service } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: ai-service, namespace: rag-knowledge }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: ai-service } }

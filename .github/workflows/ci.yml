@@ -1,0 +1,78 @@
+name: rag-knowledge-ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: admin-web/package-lock.json
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests and static checks
+        run: |
+          mvn -B -ntp verify
+          npm --prefix admin-web ci --include=dev
+          npm --prefix admin-web run build
+          python scripts/validate_k8s.py
+          python -m py_compile scripts/*.py metric-service/server.py docker/model-fixture/fixture.py
+
+      - name: Prepare isolated credentials
+        run: python scripts/ci_env.py
+
+      - name: Compose config validation
+        run: docker compose config --quiet
+
+      - name: Integration, contract and stage acceptance tests
+        run: |
+          docker compose up -d --build --wait --wait-timeout 300
+          python scripts/contract_tests.py
+          python scripts/smoke.py
+          python scripts/smoke_phase2.py
+          python scripts/smoke_phase3.py
+          python scripts/smoke_phase4.py
+          python scripts/smoke_phase5.py
+        env:
+          RAG_VERSION: ${{ github.event_name == 'workflow_dispatch' && '0.1.0' || '0.1.0' }}
+
+      - name: Upload release manifests and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: |
+            release/*.json
+            eval/reports/*.json
+            backups/*.sha256
+          if-no-files-found: ignore
+
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail=200

@@ -1,0 +1,55 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: ai-service
+  cloud:
+    loadbalancer:
+      cache:
+        enabled: false
+  data:
+    redis:
+      url: ${SPRING_DATA_REDIS_URL:redis://localhost:6379}
+      timeout: 3s
+rag:
+  gateway-ai-token: ${RAG_GATEWAY_AI_TOKEN}
+  ai-search-token: ${RAG_AI_SEARCH_TOKEN}
+  ai-doc-token: ${RAG_AI_DOC_TOKEN}
+  chat-url: ${RAG_CHAT_URL:}
+  chat-model: ${RAG_CHAT_MODEL:}
+  chat-api-key: ${RAG_CHAT_API_KEY:}
+  chat-price-input-per-million: ${RAG_CHAT_PRICE_INPUT_PER_MILLION:0}
+  chat-price-output-per-million: ${RAG_CHAT_PRICE_OUTPUT_PER_MILLION:0}
+  chat-backup-url: ${RAG_CHAT_BACKUP_URL:}
+  chat-backup-model: ${RAG_CHAT_BACKUP_MODEL:}
+  chat-backup-api-key: ${RAG_CHAT_BACKUP_API_KEY:}
+  chat-backup-price-input-per-million: ${RAG_CHAT_BACKUP_PRICE_INPUT_PER_MILLION:0}
+  chat-backup-price-output-per-million: ${RAG_CHAT_BACKUP_PRICE_OUTPUT_PER_MILLION:0}
+  chat-timeout-ms: ${RAG_CHAT_TIMEOUT_MS:18000}
+  # 向兼容端点附带 response_format=json_object；关闭后可对接不支持 JSON 模式的网关
+  chat-json-mode: ${RAG_CHAT_JSON_MODE:true}
+  # 空值表示不发送 thinking 参数；DeepSeek 默认开启思维链，接真实模型时设为 disabled
+  chat-thinking: ${RAG_CHAT_THINKING:}
+  # 从检索开始计的问答总预算，须小于网关问答路由的 45 秒响应超时
+  question-budget-ms: ${RAG_QUESTION_BUDGET_MS:40000}
+  breaker-failures: ${RAG_BREAKER_FAILURES:2}
+  breaker-cooldown-ms: ${RAG_BREAKER_COOLDOWN_MS:30000}
+  tenant-question-limit: ${RAG_TENANT_QUESTION_LIMIT:60}
+  usage-currency: ${RAG_USAGE_CURRENCY:CNY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        rag.questions: true
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] traceId=%X{traceId:-} %logger{24} : %msg%n"

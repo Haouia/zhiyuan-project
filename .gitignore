@@ -1,0 +1,11 @@
+.env
+target/
+__pycache__/
+node_modules/
+dist/
+
+# local runtime state / generated evidence (added for first upload)
+*.log
+data/
+backups/
+artifacts/

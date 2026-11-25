@@ -1,0 +1,82 @@
+# 可选 SkyWalking 接入：kustomization.yaml 中启用 patches 后生效。
+# agent 通过 initContainer 注入，JAVA_TOOL_OPTIONS 追加 -javaagent，
+# 无需重建应用镜像；traceId 由网关生成并经 X-Trace-Id / 日志透传到各服务。
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, namespace: rag-knowledge }
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: skywalking-agent
+          image: apache/skywalking-java-agent:9.4.0-java21
+          command: ["sh", "-c", "cp -r /skywalking/agent /opt/sw/agent"]
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      containers:
+        - name: gateway
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/opt/sw/agent/skywalking-agent.jar -Xms128m -XX:MaxRAMPercentage=45 -XX:MaxDirectMemorySize=96m -Duser.home=/tmp"
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      volumes:
+        - { name: sw-agent, emptyDir: {} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: doc-service, namespace: rag-knowledge }
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: skywalking-agent
+          image: apache/skywalking-java-agent:9.4.0-java21
+          command: ["sh", "-c", "cp -r /skywalking/agent /opt/sw/agent"]
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      containers:
+        - name: doc-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/opt/sw/agent/skywalking-agent.jar -Xms128m -XX:MaxRAMPercentage=45 -XX:MaxDirectMemorySize=96m -Duser.home=/tmp"
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      volumes:
+        - { name: sw-agent, emptyDir: {} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: search-service, namespace: rag-knowledge }
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: skywalking-agent
+          image: apache/skywalking-java-agent:9.4.0-java21
+          command: ["sh", "-c", "cp -r /skywalking/agent /opt/sw/agent"]
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      containers:
+        - name: search-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/opt/sw/agent/skywalking-agent.jar -Xms128m -XX:MaxRAMPercentage=45 -XX:MaxDirectMemorySize=96m -Duser.home=/tmp"
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      volumes:
+        - { name: sw-agent, emptyDir: {} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ai-service, namespace: rag-knowledge }
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: skywalking-agent
+          image: apache/skywalking-java-agent:9.4.0-java21
+          command: ["sh", "-c", "cp -r /skywalking/agent /opt/sw/agent"]
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      containers:
+        - name: ai-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-javaagent:/opt/sw/agent/skywalking-agent.jar -Xms128m -XX:MaxRAMPercentage=45 -XX:MaxDirectMemorySize=96m -Duser.home=/tmp"
+          volumeMounts: [{ name: sw-agent, mountPath: /opt/sw }]
+      volumes:
+        - { name: sw-agent, emptyDir: {} }
