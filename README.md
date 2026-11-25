@@ -2,6 +2,110 @@
 
 管理员可通过企业单点登录上传资料、追加版本并查看生效状态及租户用量，也可在工作台的「RAGAS 评测」「系统监控」「用户与权限」页面运行质量评测、查看服务健康与治理指标、审阅账号与角色。员工可在问答页查询本租户的已发布资料，点击回答里的引用回查文档版本与原文位置。网关验证身份和租户，文档服务解析原件，检索服务通过 Kafka 消费解析事件并写入 OpenSearch。AI 服务执行租户限流、主备切换与分项计量，独立 Python 服务运行离线评测。CI、固定版本镜像、K8s 配置与可观测性见「预发到生产」。[项目规划](企业级RAG知识引擎项目规划.md)
 
+## 架构链路
+
+平台按「网关统一鉴权 → 服务内网协作 → 消息与检索解耦」组织：浏览器只访问网关；网关用 Keycloak 签发的 JWT 解析出租户与角色后，按路径把请求转发给文档、检索、问答服务；文档解析与索引通过 Kafka 事件异步衔接；问答是「检索 → 生效版本核验 → 模型生成 → 引文逐字校验」的同步链路；评测、监控与权限治理由网关内的管理接口和独立的 Python 评测服务承担。
+
+### 组件拓扑
+
+```mermaid
+flowchart LR
+    ADM["管理后台 /admin/"] -->|OIDC PKCE| KC["Keycloak :8180<br/>realm rag-local"]
+    ASK["员工问答 /ask/"] -->|OIDC PKCE| KC
+    REG["自助注册 /register/"] -->|OIDC PKCE| KC
+    ADM -->|Bearer JWT| GW["gateway :8080<br/>鉴权 / 路由 / 管理接口"]
+    ASK -->|Bearer JWT| GW
+    REG -->|Bearer JWT| GW
+    GW -->|文档读写| DOC["doc-service<br/>解析 / 版本 / 原文"]
+    GW -->|问答与用量| AI["ai-service<br/>问答编排 / 限流 / 计量"]
+    AI -->|检索请求| SR["search-service<br/>索引 / 两路召回"]
+    AI -->|批量核验生效版本| DOC
+    SR -->|批量核验生效版本| DOC
+    DOC -->|rag.document.parsed.v1| KF["Kafka"]
+    KF -->|消费解析事件| SR
+    SR -->|rag.document.result.v1| KF
+    KF -->|索引结果与 DLT| DOC
+    SR -->|BM25 + kNN 融合| OS["OpenSearch<br/>rag-doc-chunks-v1"]
+    AI -->|限流与用量账本| RD["Redis"]
+    AI -->|主端点，超时切备| MP["model-primary :8095<br/>本地模型桩或 DeepSeek"]
+    AI -->|备用端点| MB["model-backup :8096"]
+    DOC -->|doc_db| MY["MySQL<br/>doc_db / search_db"]
+    SR -->|search_db| MY
+    GW -->|逐题评测| MET["metric-service :8090<br/>Faithfulness / Context Recall"]
+    MET -->|评测分数| GW
+    GW -->|归档报告| EVAL["eval/reports/"]
+    NA["Nacos<br/>服务发现 / 配置"]
+    DOC -.-> NA
+    SR -.-> NA
+    AI -.-> NA
+```
+
+### 上传与发布链路
+
+管理员在后台上传文件后，网关校验 `ADMIN` 角色并把请求转发给文档服务；文档服务保存原件，版本从 `PENDING` 进入 `PARSING`，解析并分块（DOCX 定位到段落与表格，PDF 定位到页，TXT 定位到行，文件上限 10 MiB），随后把解析正文、分块和测试向量写入 Kafka；检索服务消费事件后写入 OpenSearch（BM25 字段与 k-NN 向量两路召回，用 RRF 融合），再把索引结果写回 Kafka；文档服务消费结果后把版本推进为 `READY`（成为生效版本）或 `FAILED`（记录错误码），坏消息进入 `.DLT`。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as 管理员 /admin/
+    participant G as gateway
+    participant D as doc-service
+    participant K as Kafka
+    participant S as search-service
+    participant O as OpenSearch
+    A->>G: POST /api/v1/documents（需要 ADMIN）
+    G->>G: JWT 校验 → tenant_id / roles
+    G->>D: 转发上传（服务间凭证）
+    D->>D: 保存原件、解析 DOCX/PDF/TXT、分块与位置定位
+    D->>K: rag.document.parsed.v1（正文 + 分块 + 向量）
+    K->>S: 消费解析事件
+    S->>O: 写入 rag-doc-chunks-v1（BM25 字段 + kNN 向量）
+    S->>K: rag.document.result.v1（Indexed / IndexFailed）
+    K->>D: 消费索引结果
+    D->>D: READY 推进生效版本 / FAILED 记录错误码
+    note over A,D: 状态机 PENDING → PARSING → INDEXING → READY / FAILED
+```
+
+### 问答与引用链路
+
+员工在问答页提交问题（可带最近 3 轮历史），网关校验 JWT 与租户后转发给 AI 服务；AI 服务先做租户限流，再把「最近两轮提问 + 当前追问」拼成检索查询发给检索服务；检索服务预过滤租户与向量模型版本，做 BM25 与 k-NN 两路召回并用 RRF 融合，再批量向文档服务核验生效版本、过滤旧版并补取候选（最多 5 个片段）；AI 服务把片段与历史拼进提示词调用模型主备端点，对模型返回的每条引文逐字校验是否出现在本次召回片段与对应版本原文中，通过后返回带编号的 `citations`；历史只用于理解追问，不作为证据。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 员工 /ask/
+    participant G as gateway
+    participant AI as ai-service
+    participant S as search-service
+    participant D as doc-service
+    participant R as Redis
+    participant M as 模型端点（主/备）
+    U->>G: POST /api/v1/questions（question + history ≤ 3 轮）
+    G->>G: JWT 校验 → 租户 / 角色
+    G->>AI: 转发问答
+    AI->>R: 租户分钟限流（RAG_TENANT_QUESTION_LIMIT）
+    AI->>S: 检索（tenant + embedding version 预过滤）
+    S->>S: BM25 + kNN 两路召回，RRF 融合
+    S->>D: 批量核验生效版本，过滤旧版后补候选（≤ 5 片段）
+    AI->>M: 片段 + 历史拼提示词，JSON 输出
+    M-->>AI: answer + 逐字 quote
+    AI->>AI: 逐字校验 quote 出现在本次召回片段 / 版本原文
+    AI->>R: attemptId 原子去重，累计 Token / 待对账
+    AI-->>G: answer + citations（编号同序）
+    G-->>U: 200 ANSWERED / INSUFFICIENT_EVIDENCE / 502 / 503
+    U->>G: 点击引用 → GET /api/v1/documents/{id}/versions/{v}/source
+    G->>D: 原文定位回查
+    D-->>U: 对应版本原文片段
+```
+
+### 评测、监控与治理链路
+
+- **评测。** 管理员 `POST /api/v1/evals`，网关逐题调用 `metric-service` 的 `/internal/v1/evaluations`（固定评测集 `eval/golden.json`，40 题含 30 道有答案与 10 道资料不足），得到 Faithfulness 与 Context Recall 后脱敏归档到 `eval/reports/`；质量门禁为有答案样本平均 Faithfulness ≥ 0.90、Context Recall ≥ 0.85。离线等价方式是 `docker compose run --rm metric-eval`，直连评测服务。
+- **监控。** 管理页 `#/monitoring` 读取 `GET /api/v1/monitoring`：网关并行探测 10 个组件（4 个 Java 服务、Keycloak、OpenSearch、Nacos 与两个模型端点）并汇总各服务 `/actuator/prometheus` 指标；Prometheus 抓取网关指标，Grafana 看板见 `observability/`。
+- **身份与租户。** Keycloak 签发 JWT（`rag-local` realm、公开客户端 `rag-web`、S256 PKCE）；网关用 JWKS 验签，`tenant_id` 属性与 `realm_access.roles` 决定租户隔离与 `ADMIN`/`EMPLOYEE` 能力；`/api/v1/access` 通过 Keycloak 管理接口读取账号目录，`/api/v1/register` 匿名创建账号并授予 `EMPLOYEE`；邀请码 8 位、每 120 分钟轮换，持久化在 `data/invite-codes.json`。
+- **计量与对账。** 每次真实模型调用分配 `attemptId` 并原子去重写入 Redis 账本（按租户、日期、模型与用途累计输入/输出 Token），`/api/v1/usage` 展示 Token、待对账次数与估算费用；超出限流返回 `429` 与 `Retry-After`。
+- **基础设施。** MySQL 按服务隔离 `doc_db` / `search_db` 并由 Flyway 迁移；Kafka 解耦解析与索引；OpenSearch 承担混合检索；Redis 承载限流与用量；Nacos 提供服务发现；模型端点默认本地测试桩，可通过 `.env` 切到 DeepSeek 等 OpenAI 兼容端点（主端点超时、`429` 或 `5xx` 时在总时限内最多切备一次，连续失败两次熔断，冷却结束后半开探测）。
+
 ## 本地启动与验收
 
 启动 Docker Desktop 的 Linux 引擎。构建使用 JDK 21、Maven、Node.js 24 和 PowerShell 7.2 或更新版本。验收脚本在 Python 3.12 上验证。
